@@ -11,10 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func InitHistoryService(db *gorm.DB, logger *zap.Logger, settingKey string) (ext.JobHistory, error) {
-	service := &HistoryService{
+func InitHistoryService(db *gorm.DB, logger *zap.Logger, settingKey string) (ext.JobHistoryService, error) {
+	service := &OrmJobHistoryService{
 		DB:     db,
 		Logger: logger,
+		cache: &ext.RamHistoryService{
+			Logger: logger,
+		},
 	}
 	if settingKey != "" {
 		settings := viper.Sub(settingKey)
@@ -32,24 +35,22 @@ func InitHistoryService(db *gorm.DB, logger *zap.Logger, settingKey string) (ext
 
 type JobDetails struct {
 	gorm.Model
-	ext.Job
+	ext.JobHistory
 }
 
-type HistoryService struct {
+type OrmJobHistoryService struct {
 	DB     *gorm.DB
 	Logger *zap.Logger
-	cache  map[string]time.Time
+	cache  *ext.RamHistoryService
 }
 
-func (hs *HistoryService) ToHistory(job ext.Job) error {
-	// n :=time.Now()
+func (hs *OrmJobHistoryService) ToHistory(job ext.JobHistory) error {
 	defer func() {
-		hs.cache[job.Job] = job.Finished
-		hs.Logger.Debug("updated lastRuntime", zap.String("job", job.Job))
+		hs.ToHistory(job)
 	}()
 
 	entity := JobDetails{
-		Job: job,
+		JobHistory: job,
 	}
 	err := hs.DB.Save(&entity).Error
 	if err != nil {
@@ -61,14 +62,15 @@ func (hs *HistoryService) ToHistory(job ext.Job) error {
 	return nil
 }
 
-func (hs *HistoryService) GetLastRuntime(job string) (time.Time, error) {
-	if l, ok := hs.cache[job]; ok {
-		return l, nil
+func (hs *OrmJobHistoryService) GetLastRuntime(job string) (time.Time, error) {
+	result, err := hs.cache.GetLastRuntime(job)
+	if err == nil && !result.IsZero() {
+		return result, nil
 	}
 
 	lastJob := &JobDetails{}
 
-	err := hs.DB.First(lastJob, " job = ?", job).Error
+	err = hs.DB.First(lastJob, " job = ?", job).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			hs.Logger.Debug("job should not run before, return 0")
@@ -77,9 +79,6 @@ func (hs *HistoryService) GetLastRuntime(job string) (time.Time, error) {
 		hs.Logger.Error("query last job failed.", zap.Error(err))
 		return time.Time{}, err
 	}
-
-	hs.cache[job] = lastJob.Finished
-	hs.Logger.Debug("updated last time", zap.Time("job last run time", lastJob.Finished), zap.String("job", job))
 
 	return lastJob.Finished, nil
 }
