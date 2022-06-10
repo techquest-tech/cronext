@@ -85,6 +85,7 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 	return func(j cron.Job) cron.Job {
 		return cron.FuncJob(
 			func() {
+				jb.Logger.Debug("mark job started", zap.String("job", jb.Job))
 				task := JobHistory{
 					Job:   jb.Job,
 					Start: time.Now(),
@@ -93,8 +94,9 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 					done := time.Now()
 					task.Duration = time.Since(task.Start)
 					task.Finished = done
+					jb.Logger.Debug("mark job end", zap.String("job", jb.Job), zap.Duration("duration", task.Duration))
 					// if jobHistory != nil {
-					jb.Hs.ToHistory(task)
+					go jb.Hs.ToHistory(task)
 					// }
 				}()
 				j.Run()
