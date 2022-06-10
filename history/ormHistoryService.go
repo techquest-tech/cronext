@@ -15,16 +15,7 @@ func InitHistoryService(db *gorm.DB, logger *zap.Logger) (ext.JobHistoryService,
 	service := &OrmJobHistoryService{
 		DB:     db,
 		Logger: logger,
-		// cache: &ext.RamHistoryService{
-		// 	Logger: logger,
-		// },
 	}
-	// if settingKey != "" {
-	// 	settings := viper.Sub(settingKey)
-	// 	if settings != nil {
-	// 		settings.Unmarshal(service)
-	// 	}
-	// }
 	if viper.GetBool(ginshared.KeyInitDB) {
 		service.DB.AutoMigrate(&CronjobHistory{})
 		logger.Info("Job Details table created or updated done")
@@ -41,14 +32,9 @@ type CronjobHistory struct {
 type OrmJobHistoryService struct {
 	DB     *gorm.DB
 	Logger *zap.Logger
-	// cache  *ext.RamHistoryService
 }
 
 func (hs *OrmJobHistoryService) ToHistory(job ext.JobHistory) error {
-	// defer func() {
-	// 	hs.cache.ToHistory(job)
-	// }()
-
 	entity := CronjobHistory{
 		JobHistory: job,
 	}
@@ -57,17 +43,12 @@ func (hs *OrmJobHistoryService) ToHistory(job ext.JobHistory) error {
 		hs.Logger.Error("save history failed.", zap.Error(err))
 		return err
 	}
-	hs.Logger.Info("save history done.")
+	hs.Logger.Debug("save history done.")
 
 	return nil
 }
 
 func (hs *OrmJobHistoryService) GetLastRuntime(job string) (time.Time, error) {
-	// result, err := hs.cache.GetLastRuntime(job)
-	// if err == nil && !result.IsZero() {
-	// 	return result, nil
-	// }
-
 	lastJob := &CronjobHistory{}
 
 	err := hs.DB.First(lastJob, " job = ?", job).Error

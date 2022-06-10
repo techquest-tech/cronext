@@ -48,14 +48,14 @@ func (a *RamHistoryService) GetLastRuntime(job string) (time.Time, error) {
 	return time.Time{}, nil
 }
 
-func (jb *Job) PrintNextRuntime() {
+func (jb *Job) PrintNextRuntime(msg string) {
 	if jb.cr == nil {
 		return
 	}
 	entries := jb.cr.Entries()
 	nextRuntime := entries[0].Next
 
-	jb.Logger.Info("next run time", zap.String("job", jb.Job), zap.Time("next", nextRuntime))
+	jb.Logger.Info(msg+" next run time", zap.String("job", jb.Job), zap.Time("next", nextRuntime))
 }
 
 func (jb *Job) Schedule(cmd func()) error {
@@ -76,7 +76,7 @@ func (jb *Job) Schedule(cmd func()) error {
 
 	cr.Start()
 
-	jb.PrintNextRuntime()
+	jb.PrintNextRuntime("job scheduled.")
 
 	return nil
 }
@@ -101,7 +101,7 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 				}()
 				j.Run()
 
-				jb.PrintNextRuntime()
+				jb.PrintNextRuntime("job done.")
 			})
 	}
 }
