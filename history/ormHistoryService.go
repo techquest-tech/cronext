@@ -43,7 +43,7 @@ func (hs *OrmJobHistoryService) ToHistory(job ext.JobHistory) error {
 		hs.Logger.Error("save history failed.", zap.Error(err))
 		return err
 	}
-	hs.Logger.Debug("save history done.")
+	hs.Logger.Debug("save history done.", zap.Any("job", job))
 
 	return nil
 }
@@ -51,7 +51,7 @@ func (hs *OrmJobHistoryService) ToHistory(job ext.JobHistory) error {
 func (hs *OrmJobHistoryService) GetLastRuntime(job string) (time.Time, error) {
 	lastJob := &CronjobHistory{}
 
-	err := hs.DB.First(lastJob, " job = ?", job).Error
+	err := hs.DB.First(lastJob, " job = ? and succeed = 1 ", job).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			hs.Logger.Debug("job should not run before, return 0")

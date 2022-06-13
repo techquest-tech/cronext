@@ -22,6 +22,8 @@ type JobHistory struct {
 	Start    time.Time
 	Finished time.Time
 	Duration time.Duration
+	Succeed  bool
+	Message  string
 }
 
 type JobHistoryService interface {
@@ -35,8 +37,13 @@ type RamHistoryService struct {
 }
 
 func (a *RamHistoryService) ToHistory(job JobHistory) error {
-	a.cache.Store(job.Job, job.Finished)
-	a.Logger.Debug("updated lastRuntime", zap.String("job", job.Job), zap.Time("time", job.Finished))
+	if job.Succeed {
+		a.cache.Store(job.Job, job.Finished)
+		a.Logger.Debug("updated lastRuntime", zap.String("job", job.Job), zap.Time("time", job.Finished))
+	} else {
+		a.Logger.Debug("Job failed. cache won't be updated.", zap.String("job", job.Job), zap.Time("time", job.Finished))
+	}
+
 	return nil
 }
 
@@ -65,7 +72,7 @@ func (jb *Job) Schedule(cmd func()) error {
 
 	log := zapr.NewLogger(jb.Logger)
 
-	cr := cron.New(cron.WithChain(cron.Recover(log), cron.SkipIfStillRunning(log), jb.WithHistory()))
+	cr := cron.New(cron.WithChain(cron.SkipIfStillRunning(log), jb.WithHistory()))
 	_, err := cr.AddFunc(jb.Scheduler, cmd)
 	if err != nil {
 		jb.Logger.Error("schedule job failed.", zap.Error(err))
@@ -87,10 +94,21 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 			func() {
 				jb.Logger.Debug("mark job started", zap.String("job", jb.Job))
 				task := JobHistory{
-					Job:   jb.Job,
-					Start: time.Now(),
+					Job:     jb.Job,
+					Start:   time.Now(),
+					Succeed: true,
 				}
 				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							task.Message = err.Error()
+						}
+						task.Succeed = false
+						jb.Logger.Error("recover from panic", zap.Any("panic", r), zap.String("job", task.Job))
+					}
+
+					jb.PrintNextRuntime("job finshed.")
+
 					done := time.Now()
 					task.Duration = time.Since(task.Start)
 					task.Finished = done
@@ -99,9 +117,8 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 					go jb.Hs.ToHistory(task)
 					// }
 				}()
-				j.Run()
 
-				jb.PrintNextRuntime("job done.")
+				j.Run()
 			})
 	}
 }
