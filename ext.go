@@ -4,9 +4,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asaskevich/EventBus"
 	"github.com/go-logr/zapr"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
+)
+
+const (
+	// EventJobStarted  = "event.job.started"
+	// EventJobDone     = "event.job.done"
+	// EventJobFailed   = "event.job.failed"
+	EventJobFinished = "event.job.finished"
 )
 
 type Job struct {
@@ -15,6 +23,7 @@ type Job struct {
 	Logger    *zap.Logger
 	Hs        JobHistoryService
 	cr        *cron.Cron
+	Bus       EventBus.Bus
 }
 
 type JobHistory struct {
@@ -102,6 +111,9 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 					if r := recover(); r != nil {
 						if err, ok := r.(error); ok {
 							task.Message = err.Error()
+							if jb.Bus != nil {
+								jb.Bus.Publish("event.error", err)
+							}
 						}
 						task.Succeed = false
 						jb.Logger.Error("recover from panic", zap.Any("panic", r), zap.String("job", task.Job))
@@ -113,6 +125,9 @@ func (jb *Job) WithHistory() cron.JobWrapper {
 					task.Duration = time.Since(task.Start)
 					task.Finished = done
 					jb.Logger.Debug("mark job end", zap.String("job", jb.Job), zap.Duration("duration", task.Duration))
+					if jb.Bus != nil {
+						jb.Bus.Publish(EventJobFinished, task)
+					}
 					// if jobHistory != nil {
 					go jb.Hs.ToHistory(task)
 					// }

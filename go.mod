@@ -3,6 +3,7 @@ module github.com/techquest-tech/cronext
 go 1.18
 
 require (
+	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef
 	github.com/go-logr/zapr v1.2.3
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/viper v1.12.0
