@@ -42,6 +42,7 @@ type JobHistoryService interface {
 
 type RamHistoryService struct {
 	Logger *zap.Logger
+	Inited time.Time
 	cache  sync.Map
 }
 
@@ -61,7 +62,7 @@ func (a *RamHistoryService) GetLastRuntime(job string) (time.Time, error) {
 		last := ojb.(time.Time)
 		return last, nil
 	}
-	return time.Time{}, nil
+	return a.Inited, nil
 }
 
 func (jb *Job) PrintNextRuntime(msg string) {
@@ -74,9 +75,27 @@ func (jb *Job) PrintNextRuntime(msg string) {
 	jb.Logger.Info(msg+" next run time", zap.String("job", jb.Job), zap.Time("next", nextRuntime))
 }
 
+type TaskWithHistory func(lastRuntime time.Time) error
+
+func (jb *Job) SetTask(task TaskWithHistory) error {
+	cmd := func() {
+		lastRuntime, err := jb.Hs.GetLastRuntime(jb.Job)
+		if err != nil {
+			jb.Logger.Error("get last runtime failed", zap.Error(err))
+			return
+		}
+		err = task(lastRuntime)
+		jb.Logger.Error("run job failed", zap.Error(err))
+	}
+	return jb.Schedule(cmd)
+}
+
 func (jb *Job) Schedule(cmd func()) error {
 	if jb.Hs == nil {
-		jb.Hs = &RamHistoryService{Logger: jb.Logger}
+		jb.Hs = &RamHistoryService{
+			Logger: jb.Logger,
+			Inited: time.Now().Add(-24 * time.Hour),
+		}
 	}
 
 	log := zapr.NewLogger(jb.Logger)
