@@ -85,7 +85,12 @@ func (jb *Job) SetTask(task TaskWithHistory) error {
 			return
 		}
 		err = task(lastRuntime)
-		jb.Logger.Error("run job failed", zap.Error(err))
+		if err != nil {
+			jb.Logger.Error("run job failed", zap.Error(err))
+			panic(err)
+		}
+		jb.Logger.Info("Job done.")
+
 	}
 	return jb.Schedule(cmd)
 }
